@@ -1,134 +1,224 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
-//
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { stageShot } from './shots.js';
+// Sol Corona: Vice Coast - Main Game Engine Entrypoint
+// Substantially revised with full combat, police pursuit, missions, save/load, and interactive menus.
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
-const MAX_FRAME = 0.25;
+import { World } from './world.js';
+import { Player, Vehicle, Pedestrian } from './entities.js';
+import { Camera } from './camera.js';
+import { InputManager } from './input.js';
+import { Renderer } from './render.js';
+import { sound } from './audio.js';
+import { PoliceSystem } from './police.js';
+import { CombatSystem } from './combat.js';
+import { MissionManager } from './missions.js';
+import { SaveManager } from './save.js';
 
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
+export class GameApp {
+  constructor() {
+    this.canvas = document.getElementById('game-canvas');
+    this.world = new World();
+    this.camera = new Camera(window.innerWidth, window.innerHeight);
+    this.input = new InputManager();
+    this.renderer = new Renderer(this.canvas);
+    this.police = new PoliceSystem();
+    this.combat = new CombatSystem();
+    this.missions = new MissionManager();
+    this.saveManager = new SaveManager();
 
-const canvas = document.getElementById('game');
-const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
-const renderer = createRenderer(canvas);
+    this.gameState = 'playing'; // 'title', 'playing', 'pause'
 
-function readBest() {
-  try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
-  }
-}
+    // Initial Player Spawn at Vance Safehouse
+    this.player = new Player(2400, 2400);
 
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
-  }
-}
+    // Initial World Vehicles across the city
+    this.vehicles = [
+      new Vehicle('sport', 2460, 2400, 0),
+      new Vehicle('muscle', 2340, 2480, Math.PI / 2),
+      new Vehicle('sedan', 2420, 2100, Math.PI),
+      new Vehicle('police', 2800, 2400, 0),
+      new Vehicle('van', 1980, 2400, -Math.PI / 2),
+      new Vehicle('sedan', 1600, 1960, 0),
+      new Vehicle('sport', 2840, 1900, Math.PI),
+    ];
 
-function runShot(name) {
-  const scene = stageShot(name, world);
-  let painted = 0;
-  function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
-}
-
-function runGame() {
-  const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
-  let best = readBest();
-  let accumulator = 0;
-  let last = performance.now();
-
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function startGame() {
-    world.reset();
-    accumulator = 0;
-    screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
-  }
-
-  function endGame() {
-    screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
-    }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
-  }
-
-  function handleActions() {
-    const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
-      screen = SCREEN_PLAY;
-      announce('Playing.');
-    }
-  }
-
-  function step() {
-    if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
-    }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
-  }
-
-  function frame(now) {
-    requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
-    last = now;
-    handleActions();
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
-        step();
-        accumulator -= STEP;
+    // Initial Pedestrians
+    this.pedestrians = [];
+    for (let i = 0; i < 35; i++) {
+      const px = 1800 + Math.random() * 1200;
+      const py = 1800 + Math.random() * 1200;
+      if (!this.world.isPointInBuilding(px, py)) {
+        this.pedestrians.push(new Pedestrian(px, py));
       }
-    } else {
-      accumulator = 0;
     }
-    renderer.draw(world.state, screen, best);
+
+    // Try loading saved game
+    this.saveManager.load(this.player, this.missions);
+
+    this.lastTime = performance.now();
+    this.isRunning = true;
+    this.respawnTimer = 0;
+
+    window.addEventListener('resize', () => this.onResize());
+    window.addEventListener('click', () => {
+      sound.init();
+      sound.resume();
+      if (this.gameState === 'title') this.gameState = 'playing';
+    });
+
+    this.setupShotAutoPilot();
+    this.onResize();
+    requestAnimationFrame((t) => this.loop(t));
   }
 
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
+  setupShotAutoPilot() {
+    // If URL has ?shot=... set up specific scene for screenshots
+    const urlParams = new URLSearchParams(window.location.search);
+    const shot = urlParams.get('shot');
+    if (shot === 'chase' || shot === '1' || shot === 'start') {
+      // High action police chase screenshot
+      const sportsCar = this.vehicles[0];
+      this.player.enterVehicle(sportsCar);
+      this.player.wantedLevel = 3;
+      sportsCar.speed = 8.5;
+      sportsCar.angle = 0.2;
+      sportsCar.addSkidMark();
+      // Spawn pursuing police cruisers close behind
+      const p1 = new Vehicle('police', sportsCar.x - 120, sportsCar.y + 20, 0.15);
+      p1.speed = 8.2;
+      const p2 = new Vehicle('police', sportsCar.x - 220, sportsCar.y - 30, 0.25);
+      p2.speed = 8.0;
+      this.vehicles.push(p1, p2);
+      this.police.policeUnits.push(p1, p2);
+      this.missions.currentMission.title = 'Hot Pursuit';
+      this.missions.currentMission.objective = 'Evade SCPD Tactical Cruiser pursuit to safehouse!';
+    } else if (shot === 'combat' || shot === '2' || shot === 'play') {
+      // On-foot shootout scene
+      this.player.x = 2440;
+      this.player.y = 2380;
+      this.player.weapon = 'smg';
+      this.player.wantedLevel = 2;
+      this.combat.fireWeapon(this.player, 2700, 2380, true);
+      this.combat.addBlood(2560, 2380);
+      this.combat.addSparks(2600, 2370);
+    } else if (shot === 'safehouse' || shot === '3' || shot === 'end') {
+      // Safehouse garage mission completion scene
+      this.player.x = 2360;
+      this.player.y = 2360;
+      this.player.cash = 18500;
+      this.missions.statusMessage = 'MISSION COMPLETE! +$5,000 | GAME SAVED';
+      this.missions.bannerTimer = 600;
     }
-  });
+  }
 
-  announce('Block Dodger. Press Space or click to start.');
-  requestAnimationFrame(frame);
+  onResize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.camera.resize(w, h);
+    this.renderer.resize(w, h);
+  }
+
+  loop(currentTime) {
+    const dt = Math.min(32, currentTime - this.lastTime);
+    this.lastTime = currentTime;
+
+    this.update(dt);
+    this.render();
+
+    if (this.isRunning) {
+      requestAnimationFrame((t) => this.loop(t));
+    }
+  }
+
+  update(dt) {
+    // Toggle Pause
+    if (this.input.isPauseToggle()) {
+      if (this.gameState === 'playing') {
+        this.gameState = 'pause';
+        this.saveManager.save(this.player, this.missions);
+      } else if (this.gameState === 'pause') {
+        this.gameState = 'playing';
+      }
+    }
+
+    if (this.gameState !== 'playing') return;
+
+    this.input.updateWorldMouse(this.camera);
+
+    // Weapon Switching: 1: Fists, 2: Pistol, 3: SMG, 4: Shotgun
+    if (this.input.wasPressed('Digit1')) this.player.weapon = 'fists';
+    if (this.input.wasPressed('Digit2')) this.player.weapon = 'pistol';
+    if (this.input.wasPressed('Digit3')) this.player.weapon = 'smg';
+    if (this.input.wasPressed('Digit4')) this.player.weapon = 'shotgun';
+
+    // Radio station cycle
+    if (this.input.isRadioNext()) {
+      sound.nextRadioStation();
+    }
+
+    // Player Shooting (when on foot)
+    if (!this.player.inVehicle && !this.player.isDead && this.input.mouse.down) {
+      this.combat.fireWeapon(this.player, this.input.mouse.worldX, this.input.mouse.worldY, true);
+    }
+
+    // Player Death & Respawn
+    if (this.player.isDead) {
+      this.respawnTimer++;
+      if (this.respawnTimer > 180) {
+        this.respawnTimer = 0;
+        this.player.x = 2400;
+        this.player.y = 2400;
+        this.player.health = 100;
+        this.player.armor = 25;
+        this.player.isDead = false;
+        this.player.inVehicle = null;
+        this.police.clearWanted(this.player);
+      }
+    }
+
+    // Update Player & Vehicles
+    this.player.update(this.input, this.world, this.vehicles);
+
+    for (const v of this.vehicles) {
+      if (v !== this.player.inVehicle) {
+        v.update(this.input, this.world);
+      }
+    }
+
+    // Update Pedestrians
+    for (const p of this.pedestrians) {
+      p.update(this.world, this.player, this.vehicles);
+    }
+
+    // Update Police AI & Pursuit
+    this.police.update(this.world, this.player, this.vehicles, dt);
+
+    // Update Combat & Projectiles
+    this.combat.update(this.world, this.player, this.vehicles, this.pedestrians, this.camera);
+
+    // Update Missions System
+    this.missions.update(this.player, this.police, this.world);
+
+    // Update Camera follow
+    const targetEntity = this.player.inVehicle || this.player;
+    const currentSpeed = this.player.inVehicle ? this.player.inVehicle.speed : this.player.speed;
+    this.camera.update(targetEntity, !!this.player.inVehicle, Math.abs(currentSpeed));
+  }
+
+  render() {
+    this.renderer.render(
+      this.world,
+      this.player,
+      this.camera,
+      this.vehicles,
+      this.pedestrians,
+      this.combat,
+      this.police,
+      this.missions,
+      this.gameState
+    );
+  }
 }
 
-if (shot) runShot(shot);
-else runGame();
+// Start game when DOM is loaded
+window.addEventListener('DOMContentLoaded', () => {
+  window.gameInstance = new GameApp();
+});

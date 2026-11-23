@@ -1,61 +1,154 @@
-// Every tuning number and colour in one place. The playfield is a fixed 1280x720 logical area;
-// the renderer scales it to the window, so no rule below depends on the screen size.
+// Sol Corona: Vice Coast - Configuration and Game Constants
 
-export const FIELD = { width: 1280, height: 720, groundY: 664 };
-
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
-export const STEP = 1 / 60;
-
-export const PLAYER = {
-  width: 72,
-  height: 24,
-  speed: 560,
-  invulnerable: 1.5,
+export const WORLD = {
+  width: 4800,
+  height: 4800,
+  gridSize: 120,
+  blockSize: 360,
+  roadWidth: 120,
+  sidewalkWidth: 24,
 };
 
-export const LIVES = 3;
-
-export const BLOCK = {
-  minWidth: 40,
-  maxWidth: 110,
-  height: 36,
-  speed: 240,
-  speedPerLevel: 30,
-  speedJitter: 90,
-  interval: 0.55,
-  intervalScale: 0.88,
-  minInterval: 0.14,
-  dodgePoints: 1,
+export const COLORS = {
+  water: '#143852',
+  sand: '#d4b278',
+  grass: '#2b5030',
+  asphalt: '#1e222b',
+  asphaltLine: '#d8ab28',
+  asphaltWhite: '#e2e8f0',
+  sidewalk: '#4a5568',
+  curb: '#718096',
+  buildingRoof: '#2d3748',
+  buildingFacade: '#1a202c',
+  neonPink: '#ff007f',
+  neonCyan: '#00f0ff',
+  neonOrange: '#ff8800',
+  neonPurple: '#9d4edd',
+  health: '#22c55e',
+  armor: '#3b82f6',
+  wantedStar: '#eab308',
+  policeBlue: '#2563eb',
+  policeRed: '#dc2626',
 };
 
-export const COIN = {
-  size: 24,
-  speed: 190,
-  speedPerLevel: 14,
-  interval: 1.4,
-  intervalJitter: 0.8,
-  points: 10,
+export const VEHICLE_TYPES = {
+  sedan: {
+    name: 'Corona Cruiser',
+    width: 44,
+    length: 84,
+    maxSpeed: 8.5,
+    acceleration: 0.16,
+    reverseSpeed: 3.5,
+    braking: 0.28,
+    turnSpeed: 0.046,
+    friction: 0.975,
+    mass: 1400,
+    health: 300,
+    color: '#3b82f6',
+    roofColor: '#1d4ed8',
+  },
+  sport: {
+    name: 'Vance Turbo GT',
+    width: 46,
+    length: 88,
+    maxSpeed: 11.5,
+    acceleration: 0.24,
+    reverseSpeed: 4.0,
+    braking: 0.35,
+    turnSpeed: 0.052,
+    friction: 0.98,
+    mass: 1200,
+    health: 260,
+    color: '#ef4444',
+    roofColor: '#b91c1c',
+  },
+  muscle: {
+    name: 'San Pedro Stallion',
+    width: 46,
+    length: 90,
+    maxSpeed: 9.8,
+    acceleration: 0.21,
+    reverseSpeed: 3.6,
+    braking: 0.26,
+    turnSpeed: 0.042,
+    friction: 0.97,
+    mass: 1650,
+    health: 380,
+    color: '#f59e0b',
+    roofColor: '#d97706',
+  },
+  police: {
+    name: 'SCPD Interceptor',
+    width: 46,
+    length: 88,
+    maxSpeed: 10.2,
+    acceleration: 0.22,
+    reverseSpeed: 3.8,
+    braking: 0.32,
+    turnSpeed: 0.049,
+    friction: 0.976,
+    mass: 1550,
+    health: 350,
+    color: '#0f172a',
+    roofColor: '#f8fafc',
+    isPolice: true,
+  },
+  van: {
+    name: 'Pacific Cargo Van',
+    width: 50,
+    length: 96,
+    maxSpeed: 6.8,
+    acceleration: 0.12,
+    reverseSpeed: 2.8,
+    braking: 0.22,
+    turnSpeed: 0.036,
+    friction: 0.965,
+    mass: 2200,
+    health: 500,
+    color: '#64748b',
+    roofColor: '#475569',
+  },
 };
 
-/** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
-export const LEVEL = { seconds: 12, max: 12 };
-
-/** How many falling things can exist at once; the pool is allocated once, at boot. */
-export const POOL_SIZE = 64;
-
-export const PALETTE = {
-  backdrop: '#11141b',
-  sky: '#1b1f2a',
-  ground: '#2a3040',
-  player: '#4fc3f7',
-  block: '#e5534b',
-  coin: '#f2c94c',
-  panel: '#252b38',
-  text: '#eef1f5',
-  muted: '#8b93a3',
+export const WEAPONS = {
+  fists: {
+    name: 'Fists',
+    damage: 15,
+    range: 48,
+    fireRate: 350,
+    ammo: Infinity,
+    spread: 0.2,
+    isMelee: true,
+  },
+  pistol: {
+    name: 'Sol 9mm Pistol',
+    damage: 32,
+    range: 420,
+    fireRate: 260,
+    bulletSpeed: 22,
+    ammo: 96,
+    spread: 0.06,
+    sound: 'pistol',
+  },
+  smg: {
+    name: 'Viper .45 SMG',
+    damage: 22,
+    range: 380,
+    fireRate: 110,
+    bulletSpeed: 24,
+    ammo: 240,
+    spread: 0.12,
+    sound: 'smg',
+  },
+  shotgun: {
+    name: 'Enforcer 12G',
+    damage: 18,
+    pellets: 6,
+    range: 280,
+    fireRate: 750,
+    bulletSpeed: 19,
+    ammo: 48,
+    spread: 0.22,
+    sound: 'shotgun',
+  },
 };
-
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
-
-/** Where the best score is kept between visits (this browser only). */
-export const BEST_KEY = 'block-dodger.best';

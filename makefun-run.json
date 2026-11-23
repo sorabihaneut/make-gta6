@@ -1,0 +1,35 @@
+{
+  "format": "makefun-run/1",
+  "prompt": {
+    "text": "We are entering the Make.fun bounty \"gta6-01\" (Make GTA 6). Build a complete, original, polished open-world crime game in this repository.\n\nBefore coding:\n\n1. Read \"../gta6-01-kit/RULES.txt\" and all relevant Make.fun instructions.\n2. Inspect the existing starter files, \"main.ts\", \"serve.ts\", \"shots.json\", and \"vendor/makefun-game.ts\".\n3. Inspect the Make.fun CLI documentation and determine the exact required schema and location for \"makefun-run.json\". Do not invent metadata or schema fields.\n4. Preserve \"vendor/makefun-game.ts\" byte-for-byte.\n\nGame requirements:\n\n- Create an original fictional city and original game identity. Do not use GTA, Rockstar, Vice City, copyrighted characters, maps, logos, music, or assets.\n- Build a complete playable open-world experience with walking, driving, vehicle entry/exit, traffic, pedestrians, missions, combat, wanted levels, police pursuit, HUD, minimap, menus, save/load, sound effects, and polished controls.\n- Use original graphics and procedural assets. No remote dependencies or network requests. The game must work offline in desktop Chrome.\n- Prioritize responsive controls, stable gameplay, visual polish, clear objectives, and a cohesive original world.\n- Keep all game files inside \"game/\". Respect every size, file-count, screenshot, and output restriction in the bounty rules.\n- Implement the required Node.js 22 standard-library build in root \"main.ts\". It must generate the required output under \"/output\" deterministically.\n- Produce 3–4 genuine browser screenshots of the actual running game in \"screenshots/\". Do not fabricate or edit screenshots.\n- Create the required \"dossier.json\" and \"makefun-run.json\" using the exact documented formats and truthful metadata.\n\nImportant submission and transcript requirements:\n\n- This is a recorded Antigravity CLI session. Do not stop or interfere with the active Make.fun recorder.\n- You must author the implementation yourself. Do not copy another entry or use prewritten game implementations.\n- Work iteratively: first implement a functional foundation, then run and inspect it, then make a substantial revision to the same entrypoint/code file in a separate assistant turn. Continue testing and improving in subsequent turns. The final source must reflect those revisions.\n- Record the actual opening prompt, harness/version, provider, model, effort, agent mode, system-prompt state, MCP servers, and instruction files accurately. Do not fabricate missing information. If a required value cannot be determined, investigate the supported method for obtaining it.\n- Do not claim the game is complete until you have run it in Chrome and verified the actual gameplay.\n- Do not submit the bounty yet. First finish implementation, run all checks, and report the final commit hash and verification results.\n\nStart by inspecting the repository and rules, then explain your implementation plan briefly before making changes.",
+    "origin": "typed",
+    "via": null
+  },
+  "system_prompt": {
+    "status": "in-session",
+    "why": null
+  },
+  "instructions": {
+    "status": "none",
+    "why": null
+  },
+  "mcp_servers": [
+    {
+      "name": "playwright",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.85"
+      ]
+    }
+  ],
+  "declared": {
+    "harness": "antigravity",
+    "harness_version": "1.5.14",
+    "model": "gemini-3.8-flash",
+    "provider": "google",
+    "reasoning_effort": "medium",
+    "notes": null
+  }
+}

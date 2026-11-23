@@ -1,124 +1,174 @@
-// The game's rules and state, with no drawing and no browser in it: the player's paddle, the
-// pool of falling blocks and coins, spawning, collisions, score, lives and level. step() advances
-// one fixed step and returns what happened as bit flags, so the caller can react without the
-// world knowing about screens or sound. Nothing here allocates after createWorld returns.
-import { BLOCK, COIN, FIELD, LEVEL, LIVES, PLAYER, POOL_SIZE } from './config.js';
+// Sol Corona: Vice Coast - World City Generator & Spatial Map
+import { WORLD, COLORS } from './config.js';
 
-export const KIND_BLOCK = 0;
-export const KIND_COIN = 1;
+export class World {
+  constructor() {
+    this.width = WORLD.width;
+    this.height = WORLD.height;
+    this.roads = [];
+    this.intersections = [];
+    this.buildings = [];
+    this.props = []; // Palm trees, street lamps, fire hydrants
+    this.landmarks = [];
+    this.spawnPoints = [];
 
-export const EVENT_HIT = 1;
-export const EVENT_COIN = 2;
-export const EVENT_OVER = 4;
-
-function overlaps(a, b) {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-}
-
-export function createWorld(random) {
-  const player = { x: 0, y: FIELD.groundY - PLAYER.height, width: PLAYER.width, height: PLAYER.height, invulnerable: 0 };
-  const items = [];
-  for (let index = 0; index < POOL_SIZE; index += 1) {
-    items.push({ active: false, kind: KIND_BLOCK, x: 0, y: 0, width: 0, height: 0, speed: 0 });
-  }
-  const state = { player, items, score: 0, lives: LIVES, level: 1, elapsed: 0, blockTimer: 0, coinTimer: 0 };
-
-  function reset() {
-    player.x = (FIELD.width - player.width) / 2;
-    player.invulnerable = 0;
-    for (const item of items) item.active = false;
-    state.score = 0;
-    state.lives = LIVES;
-    state.level = 1;
-    state.elapsed = 0;
-    state.blockTimer = BLOCK.interval;
-    state.coinTimer = COIN.interval;
+    this.generateCity();
   }
 
-  function freeItem() {
-    for (let index = 0; index < items.length; index += 1) if (!items[index].active) return items[index];
-    return null;
-  }
+  generateCity() {
+    const step = WORLD.blockSize + WORLD.roadWidth;
+    const cols = Math.floor(this.width / step);
+    const rows = Math.floor(this.height / step);
 
-  function spawnBlock() {
-    const item = freeItem();
-    if (item === null) return;
-    item.active = true;
-    item.kind = KIND_BLOCK;
-    item.width = BLOCK.minWidth + random() * (BLOCK.maxWidth - BLOCK.minWidth);
-    item.height = BLOCK.height;
-    item.x = random() * (FIELD.width - item.width);
-    item.y = -item.height;
-    item.speed = BLOCK.speed + BLOCK.speedPerLevel * (state.level - 1) + random() * BLOCK.speedJitter;
-  }
-
-  function spawnCoin() {
-    const item = freeItem();
-    if (item === null) return;
-    item.active = true;
-    item.kind = KIND_COIN;
-    item.width = COIN.size;
-    item.height = COIN.size;
-    item.x = random() * (FIELD.width - item.width);
-    item.y = -item.height;
-    item.speed = COIN.speed + COIN.speedPerLevel * (state.level - 1);
-  }
-
-  function blockInterval() {
-    return Math.max(BLOCK.minInterval, BLOCK.interval * BLOCK.intervalScale ** (state.level - 1));
-  }
-
-  /**
-   * One fixed step. `direction` is -1, 0 or 1 (left, still, right). With `harmless` set (the title
-   * screen's backdrop) things fall but nothing touches the player and nothing scores.
-   */
-  function step(dt, direction, harmless) {
-    let events = 0;
-    state.elapsed += dt;
-    state.level = Math.min(LEVEL.max, 1 + Math.floor(state.elapsed / LEVEL.seconds));
-
-    player.x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * dt));
-    if (player.invulnerable > 0) player.invulnerable = Math.max(0, player.invulnerable - dt);
-
-    state.blockTimer -= dt;
-    if (state.blockTimer <= 0) {
-      spawnBlock();
-      state.blockTimer += blockInterval();
-    }
-    state.coinTimer -= dt;
-    if (state.coinTimer <= 0) {
-      spawnCoin();
-      state.coinTimer += COIN.interval + random() * COIN.intervalJitter;
+    // 1. Generate grid roads and intersections
+    for (let c = 0; c <= cols; c++) {
+      const x = c * step + WORLD.roadWidth / 2;
+      this.roads.push({
+        type: 'vertical',
+        x: x - WORLD.roadWidth / 2,
+        y: 0,
+        width: WORLD.roadWidth,
+        height: this.height,
+        lanes: 4,
+      });
     }
 
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (!item.active) continue;
-      item.y += item.speed * dt;
-      if (item.y > FIELD.groundY) {
-        item.active = false;
-        if (item.kind === KIND_BLOCK && !harmless) state.score += BLOCK.dodgePoints;
-        continue;
+    for (let r = 0; r <= rows; r++) {
+      const y = r * step + WORLD.roadWidth / 2;
+      this.roads.push({
+        type: 'horizontal',
+        x: 0,
+        y: y - WORLD.roadWidth / 2,
+        width: this.width,
+        height: WORLD.roadWidth,
+        lanes: 4,
+      });
+    }
+
+    // Intersections for traffic AI routing
+    for (let c = 0; c <= cols; c++) {
+      for (let r = 0; r <= rows; r++) {
+        const x = c * step + WORLD.roadWidth / 2;
+        const y = r * step + WORLD.roadWidth / 2;
+        this.intersections.push({ x, y, radius: WORLD.roadWidth / 2 });
       }
-      if (harmless || !overlaps(item, player)) continue;
-      if (item.kind === KIND_COIN) {
-        item.active = false;
-        state.score += COIN.points;
-        events |= EVENT_COIN;
-      } else if (player.invulnerable === 0) {
-        item.active = false;
-        state.lives -= 1;
-        player.invulnerable = PLAYER.invulnerable;
-        events |= EVENT_HIT;
-        if (state.lives === 0) {
-          events |= EVENT_OVER;
-          break;
+    }
+
+    // 2. City Blocks with Architecture and Special Locations
+    const buildingColors = [
+      { roof: '#1e293b', facade: '#0f172a', accent: COLORS.neonCyan },
+      { roof: '#334155', facade: '#1e293b', accent: COLORS.neonPink },
+      { roof: '#3b4252', facade: '#2e3440', accent: COLORS.neonOrange },
+      { roof: '#475569', facade: '#334155', accent: '#38bdf8' },
+      { roof: '#27272a', facade: '#18181b', accent: COLORS.neonPurple },
+    ];
+
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < rows; r++) {
+        const blockX = c * step + WORLD.roadWidth;
+        const blockY = r * step + WORLD.roadWidth;
+        const blockW = WORLD.blockSize;
+        const blockH = WORLD.blockSize;
+
+        // Subdivide block into 2x2 or 4 lots
+        const subW = (blockW - 16) / 2;
+        const subH = (blockH - 16) / 2;
+
+        for (let sx = 0; sx < 2; sx++) {
+          for (let sy = 0; sy < 2; sy++) {
+            const bX = blockX + sx * (subW + 8) + 4;
+            const bY = blockY + sy * (subH + 8) + 4;
+            const palette = buildingColors[(c * 3 + r * 5 + sx + sy * 2) % buildingColors.length];
+            const height2D = 40 + ((c * 7 + r * 11 + sx * 3) % 45); // Height extrusion for 2.5D
+
+            // Check if special landmark
+            let isSafehouse = (c === 5 && r === 5 && sx === 0 && sy === 0);
+            let isRespray = (c === 3 && r === 4 && sx === 1 && sy === 1);
+            let isClub = (c === 6 && r === 4 && sx === 0 && sy === 1);
+            let isBank = (c === 4 && r === 6 && sx === 1 && sy === 0);
+
+            let label = null;
+            if (isSafehouse) label = 'Safehouse & Garage';
+            else if (isRespray) label = "Pay 'n' Spray Respray";
+            else if (isClub) label = 'The Neon Flamingo Lounge';
+            else if (isBank) label = 'Corona First Depository';
+
+            this.buildings.push({
+              x: bX,
+              y: bY,
+              width: subW,
+              height: subH,
+              height2D: height2D,
+              roofColor: palette.roof,
+              facadeColor: palette.facade,
+              accentColor: palette.accent,
+              label: label,
+              isSafehouse,
+              isRespray,
+              isClub,
+              isBank,
+            });
+
+            // Add palm trees along sidewalk perimeter
+            if (sx === 0 && sy === 0) {
+              this.props.push({ type: 'palm', x: bX - 14, y: bY + subH / 2 });
+              this.props.push({ type: 'palm', x: bX + subW / 2, y: bY - 14 });
+            }
+          }
         }
       }
     }
-    return events;
+
+    // Special landmarks list
+    this.landmarks = [
+      { name: 'Vance Safehouse', x: 2360, y: 2360, type: 'safehouse', icon: 'S' },
+      { name: 'Speedy Respray Garage', x: 1540, y: 1960, type: 'respray', icon: 'W' },
+      { name: 'Neon Flamingo Club', x: 2840, y: 1960, type: 'mission', icon: 'M' },
+      { name: 'Corona Ocean Port', x: 800, y: 3800, type: 'docks', icon: 'D' },
+    ];
   }
 
-  reset();
-  return { state, reset, step };
+  isPointInBuilding(x, y) {
+    for (const b of this.buildings) {
+      if (x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height) {
+        return b;
+      }
+    }
+    return null;
+  }
+
+  checkCollision(x, y, radius = 16) {
+    // Boundary collision
+    if (x - radius < 0 || x + radius > this.width || y - radius < 0 || y + radius > this.height) {
+      return { collided: true, type: 'boundary' };
+    }
+
+    // Building collision
+    for (const b of this.buildings) {
+      if (
+        x + radius >= b.x &&
+        x - radius <= b.x + b.width &&
+        y + radius >= b.y &&
+        y - radius <= b.y + b.height
+      ) {
+        // Find nearest push-out edge
+        const overlapL = (x + radius) - b.x;
+        const overlapR = (b.x + b.width) - (x - radius);
+        const overlapT = (y + radius) - b.y;
+        const overlapB = (b.y + b.height) - (y - radius);
+        const minOverlap = Math.min(overlapL, overlapR, overlapT, overlapB);
+
+        let pushX = 0;
+        let pushY = 0;
+        if (minOverlap === overlapL) pushX = -overlapL;
+        else if (minOverlap === overlapR) pushX = overlapR;
+        else if (minOverlap === overlapT) pushY = -overlapT;
+        else pushY = overlapB;
+
+        return { collided: true, building: b, pushX, pushY };
+      }
+    }
+
+    return { collided: false };
+  }
 }

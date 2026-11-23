@@ -1,53 +1,118 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Sol Corona: Vice Coast - Unified Input Manager
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+export class InputManager {
+  constructor() {
+    this.keys = new Map();
+    this.justPressed = new Map();
+    this.mouse = {
+      x: 0,
+      y: 0,
+      down: false,
+      rightDown: false,
+      worldX: 0,
+      worldY: 0,
+    };
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+    window.addEventListener('keydown', (e) => this.onKeyDown(e));
+    window.addEventListener('keyup', (e) => this.onKeyUp(e));
+    window.addEventListener('mousemove', (e) => this.onMouseMove(e));
+    window.addEventListener('mousedown', (e) => this.onMouseDown(e));
+    window.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+  onKeyDown(e) {
+    const code = e.code;
+    if (!this.keys.get(code)) {
+      this.justPressed.set(code, true);
+    }
+    this.keys.set(code, true);
 
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+    // Prevent default browser scroll on arrow keys and space
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(code)) {
+      e.preventDefault();
+    }
+  }
 
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-  };
+  onKeyUp(e) {
+    this.keys.set(e.code, false);
+    this.justPressed.delete(e.code);
+  }
+
+  onMouseMove(e) {
+    this.mouse.x = e.clientX;
+    this.mouse.y = e.clientY;
+  }
+
+  onMouseDown(e) {
+    if (e.button === 0) this.mouse.down = true;
+    if (e.button === 2) this.mouse.rightDown = true;
+  }
+
+  onMouseUp(e) {
+    if (e.button === 0) this.mouse.down = false;
+    if (e.button === 2) this.mouse.rightDown = false;
+  }
+
+  isDown(code) {
+    return !!this.keys.get(code);
+  }
+
+  wasPressed(code) {
+    if (this.justPressed.get(code)) {
+      this.justPressed.delete(code);
+      return true;
+    }
+    return false;
+  }
+
+  // Helper bindings
+  isUp() {
+    return this.isDown('KeyW') || this.isDown('ArrowUp');
+  }
+
+  isDownKey() {
+    return this.isDown('KeyS') || this.isDown('ArrowDown');
+  }
+
+  isLeft() {
+    return this.isDown('KeyA') || this.isDown('ArrowLeft');
+  }
+
+  isRight() {
+    return this.isDown('KeyD') || this.isDown('ArrowRight');
+  }
+
+  isSprint() {
+    return this.isDown('ShiftLeft') || this.isDown('ShiftRight');
+  }
+
+  isHandbrake() {
+    return this.isDown('Space');
+  }
+
+  isAction() {
+    return this.wasPressed('KeyF') || this.wasPressed('Enter');
+  }
+
+  isInteract() {
+    return this.wasPressed('KeyE');
+  }
+
+  isRadioNext() {
+    return this.wasPressed('KeyR');
+  }
+
+  isMapToggle() {
+    return this.wasPressed('KeyM');
+  }
+
+  isPauseToggle() {
+    return this.wasPressed('Escape');
+  }
+
+  updateWorldMouse(camera) {
+    this.mouse.worldX = (this.mouse.x - camera.viewportWidth / 2) / camera.zoom + camera.x;
+    this.mouse.worldY = (this.mouse.y - camera.viewportHeight / 2) / camera.zoom + camera.y;
+  }
 }
